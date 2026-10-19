@@ -156,16 +156,45 @@ function saveBlob(blob,name){
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
   document.body.appendChild(a);a.click();a.remove();
 }
+/* ===== بناء صفحات ملف Excel ===== */
+function parseItems(text){
+  // كل سطر = صنف؛ الكمية من "× 2" إن وُجدت وإلا 1
+  return String(text||"").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{
+    l=l.replace(/^[•\-\*]\s*/,"").replace(/\s*=\s*[\d.,]+\s*(د\.ل)?\s*$/,"");
+    let qty=1;const m=l.match(/\s*[×xX]\s*(\d+)\s*$/);
+    if(m){qty=parseInt(m[1],10);l=l.slice(0,m.index).trim()}
+    return {name:l,qty};
+  });
+}
+function buildSheets(list){
+  const sorted=[...list].sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id);
+  const orders=[["رقم","التاريخ","الزبون","المدينة","العطور","المبلغ","التكلفة","الربح"]];
+  const items=[["رقم الطلب","التاريخ","الزبون","الصنف","الكمية"]];
+  const byDay={};
+  sorted.forEach((s,i)=>{
+    const n=i+1;
+    orders.push([n,s.date,s.name,s.city,String(s.items||"").replace(/\n/g," | "),s.amount,s.cost||"",s.cost?s.amount-s.cost:""]);
+    const its=parseItems(s.items);
+    if(its.length)its.forEach(it=>items.push([n,s.date,s.name,it.name,it.qty]));
+    else items.push([n,s.date,s.name,"",""]);
+    const d=byDay[s.date]||(byDay[s.date]={n:0,total:0,profit:0});
+    d.n++;d.total+=s.amount;if(s.cost>0)d.profit+=s.amount-s.cost;
+  });
+  const daily=[["التاريخ","عدد الطلبات","إجمالي المبيعات","الربح"]];
+  Object.keys(byDay).sort().forEach(k=>daily.push([k,byDay[k].n,byDay[k].total,byDay[k].profit||""]));
+  return {orders,items,daily};
+}
 $("csv").onclick=()=>{
   if(!sales.length){alert("لا توجد مبيعات");return}
-  const rows=[["التاريخ","الزبون","المدينة","العطور","المبلغ","التكلفة","الربح"]].concat(
-    [...sales].sort((a,b)=>a.date.localeCompare(b.date)).map(s=>[s.date,s.name,s.city,String(s.items||"").replace(/\n/g," | "),s.amount,s.cost||"",s.cost?s.amount-s.cost:""]));
+  const sh=buildSheets(sales);
+  const rows=sh.orders;
   const day=ymd(new Date());
   if(window.XLSX){
-    const ws=XLSX.utils.aoa_to_sheet(rows);
-    ws["!cols"]=[{wch:12},{wch:18},{wch:12},{wch:40},{wch:10},{wch:10},{wch:10}];
     const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,"المبيعات");
+    const add=(name,data,cols)=>{const ws=XLSX.utils.aoa_to_sheet(data);ws["!cols"]=cols.map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,ws,name)};
+    add("المبيعات",sh.orders,[6,12,18,12,40,10,10,10]);
+    add("الأصناف",sh.items,[10,12,18,40,8]);
+    add("ملخص يومي",sh.daily,[12,12,16,10]);
     wb.Workbook={Views:[{RTL:true}]};
     const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
     saveBlob(new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),"sales-"+day+".xlsx");
