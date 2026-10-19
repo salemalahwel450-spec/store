@@ -73,13 +73,14 @@ button{border:0;border-radius:12px;padding:13px;font-size:16px;font-family:inher
   <div class="box">
     <h2>حفظ نسخة احتياطية</h2>
     <div class="bar">
-      <button class="ghost" id="csv">تنزيل Excel (CSV)</button>
+      <button class="ghost" id="csv">تنزيل ملف Excel</button>
       <button class="ghost" id="copy">نسخ الملخص</button>
     </div>
-    <p class="hint">البيانات محفوظة في متصفح هاتفك فقط. إن مسحت بيانات المتصفح أو غيّرت الهاتف تضيع، فحمّل نسخة CSV بين وقت وآخر. وافتح هذه الصفحة دائماً من نفس الرابط ونفس المتصفح.</p>
+    <p class="hint">البيانات محفوظة في متصفح هاتفك فقط. إن مسحت بيانات المتصفح أو غيّرت الهاتف تضيع، فحمّل ملف Excel بين وقت وآخر. وافتح هذه الصفحة دائماً من نفس الرابط ونفس المتصفح.</p>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const KEY="perfume_sales_v1";
@@ -151,14 +152,28 @@ $("save").onclick=()=>{
   render();window.scrollTo({top:0,behavior:"smooth"});
 };
 
+function saveBlob(blob,name){
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();a.remove();
+}
 $("csv").onclick=()=>{
   if(!sales.length){alert("لا توجد مبيعات");return}
-  const q=v=>'"'+String(v).replace(/"/g,'""').replace(/\n/g," | ")+'"';
   const rows=[["التاريخ","الزبون","المدينة","العطور","المبلغ","التكلفة","الربح"]].concat(
-    [...sales].sort((a,b)=>a.date.localeCompare(b.date)).map(s=>[s.date,s.name,s.city,s.items,s.amount,s.cost||"",s.cost?s.amount-s.cost:""]));
-  const blob=new Blob(["﻿"+rows.map(r=>r.map(q).join(",")).join("\n")],{type:"text/csv;charset=utf-8"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sales-"+ymd(new Date())+".csv";
-  document.body.appendChild(a);a.click();a.remove();
+    [...sales].sort((a,b)=>a.date.localeCompare(b.date)).map(s=>[s.date,s.name,s.city,String(s.items||"").replace(/\n/g," | "),s.amount,s.cost||"",s.cost?s.amount-s.cost:""]));
+  const day=ymd(new Date());
+  if(window.XLSX){
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"]=[{wch:12},{wch:18},{wch:12},{wch:40},{wch:10},{wch:10},{wch:10}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"المبيعات");
+    wb.Workbook={Views:[{RTL:true}]};
+    const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    saveBlob(new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),"sales-"+day+".xlsx");
+  }else{
+    // بديل إن لم تُحمَّل المكتبة (بدون إنترنت): CSV بفاصلة منقوطة
+    const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+    saveBlob(new Blob(["﻿"+rows.map(r=>r.map(q).join(";")).join("\n")],{type:"text/csv;charset=utf-8"}),"sales-"+day+".csv");
+  }
 };
 $("copy").onclick=async()=>{
   const now=new Date(),today=ymd(now),ws=ymd(weekStart(now)),ms=now.getFullYear()+"-"+pad(now.getMonth()+1);
