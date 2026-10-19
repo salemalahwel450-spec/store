@@ -62,7 +62,11 @@ button{border:0;border-radius:12px;padding:13px;font-size:16px;font-family:inher
       <label>العنوان</label><input id="f_addr">
       <label>العطور</label><textarea id="f_items" rows="3"></textarea>
       <div class="two">
-        <div><label>المبلغ المطلوب تحصيله (د.ل)</label><input id="f_cod" inputmode="decimal" placeholder="مثال: 645"></div>
+        <div><label>سعر العطور (د.ل)</label><input id="f_price" inputmode="decimal" placeholder="مثال: 645"></div>
+        <div><label>رسوم التوصيل (د.ل)</label><input id="f_fee" inputmode="decimal" placeholder="تُملأ حسب المدينة"></div>
+      </div>
+      <div class="two">
+        <div><label>المطلوب تحصيله (د.ل)</label><input id="f_cod" inputmode="decimal" placeholder="يُحسب تلقائياً"></div>
         <div><label>ملاحظات</label><input id="f_notes"></div>
       </div>
       <label>حجم الملصق</label>
@@ -84,6 +88,8 @@ button{border:0;border-radius:12px;padding:13px;font-size:16px;font-family:inher
     <div class="row"><span class="k">العنوان: </span><span id="l_addr"></span></div>
     <div class="items" id="l_items"></div>
     <div class="row" id="l_notes_row" style="display:none"><span class="k">ملاحظات: </span><span id="l_notes"></span></div>
+    <div class="row" id="l_price_row" style="display:none"><span class="k">سعر العطور: </span><span id="l_price"></span></div>
+    <div class="row" id="l_fee_row" style="display:none"><span class="k">رسوم التوصيل: </span><span id="l_fee"></span></div>
     <div class="cod" id="l_cod"></div>
   </div>
 </div>
@@ -91,29 +97,50 @@ button{border:0;border-radius:12px;padding:13px;font-size:16px;font-family:inher
 <script>
 const $=id=>document.getElementById(id);
 const map=[["f_name","l_name"],["f_phone","l_phone"],["f_city","l_city"],["f_addr","l_addr"],["f_items","l_items"],["f_notes","l_notes"]];
+const FEES={"طرابلس":15,"جنزور":20,"تاجوراء":20,"الخمس":20,"مسلاتة":20,"زليتن":20,"الزاوية":25,"صبراتة":25,"غريان":25,"صرمان":25,"مصراتة":25,
+"الجميل":30,"زوارة":30,"ترهونة":30,"بني وليد":30,"سرت":30,"سبها":30,"بنغازي":30,"البيضاء":35,"درنة":35,"الجفرة":35,"المرج":35,
+"طبرق":45,"الزنتان":45,"نالوت":45,"مرزق":45,"غات":55,"أجدابيا":40,"شحات":40,"أوباري":40,"الكفرة":40,"يفرن":40,"رقدالين":40,"الأصابعة":40};
+const n=v=>{const x=parseFloat(String(v).replace(/[^\d.]/g,""));return isNaN(x)?0:x};
+let feeTouched=false,codTouched=false;
+function feeFor(city){city=city.trim();if(FEES[city]!=null)return FEES[city];
+  const k=Object.keys(FEES).find(k=>city&&city.includes(k));return k?FEES[k]:null}
+function recalc(){
+  if(!codTouched){const t=n($("f_price").value)+n($("f_fee").value);$("f_cod").value=n($("f_price").value)?String(t):""}
+}
 function draw(){
   map.forEach(([f,l])=>$(l).textContent=$(f).value.trim());
   $("l_notes_row").style.display=$("f_notes").value.trim()?"block":"none";
+  const price=n($("f_price").value),fee=n($("f_fee").value);
+  $("l_price_row").style.display=price?"block":"none";$("l_price").textContent=price+" د.ل";
+  $("l_fee_row").style.display=fee?"block":"none";$("l_fee").textContent=fee+" د.ل";
   const c=$("f_cod").value.trim();
   $("l_cod").textContent=c?("المطلوب تحصيله: "+c+" د.ل (دفع عند الاستلام)"):"الدفع نقداً عند الاستلام";
   const sz=document.querySelector("input[name=sz]:checked").value;
   $("label").className=sz;
 }
 document.querySelectorAll("input,textarea").forEach(e=>e.addEventListener("input",draw));
+$("f_city").addEventListener("input",()=>{if(!feeTouched){const f=feeFor($("f_city").value);$("f_fee").value=f==null?"":String(f)}recalc();draw()});
+$("f_fee").addEventListener("input",()=>{feeTouched=true;recalc();draw()});
+$("f_price").addEventListener("input",()=>{recalc();draw()});
+$("f_cod").addEventListener("input",()=>{codTouched=true;draw()});
 document.querySelectorAll("input[name=sz]").forEach(e=>e.addEventListener("change",draw));
 
 function grab(txt,key){const m=txt.match(new RegExp("^\\s*"+key+"\\s*[:：]\\s*(.+)$","m"));return m?m[1].trim():""}
 $("auto").onclick=()=>{
   const t=$("paste").value;
+  feeTouched=false;codTouched=false;
   $("f_name").value=grab(t,"الاسم");
   $("f_phone").value=grab(t,"الهاتف");
   $("f_city").value=grab(t,"المدينة");
   $("f_addr").value=grab(t,"العنوان");
   $("f_notes").value=grab(t,"ملاحظات");
-  const items=t.split("\n").filter(l=>l.trim().startsWith("•")).map(l=>l.trim()).join("\n");
-  $("f_items").value=items;
-  const tot=t.match(/الإجمالي\s*[:：]\s*([\d.,]+)/)||t.match(/مجموع العطور\s*[:：]\s*([\d.,]+)/);
-  if(tot)$("f_cod").value=tot[1];
+  $("f_items").value=t.split("\n").filter(l=>l.trim().startsWith("•")).map(l=>l.trim()).join("\n");
+  const price=t.match(/مجموع العطور\s*[:：]\s*([\d.,]+)/),fee=t.match(/التوصيل\s*[:：]\s*([\d.,]+)/),tot=t.match(/الإجمالي\s*[:：]\s*([\d.,]+)/);
+  $("f_price").value=price?price[1].replace(/,/g,""):"";
+  if(fee){$("f_fee").value=fee[1].replace(/,/g,"");feeTouched=true}
+  else{const f=feeFor($("f_city").value);$("f_fee").value=f==null?"":String(f)}
+  recalc();
+  if(tot&&!price){$("f_cod").value=tot[1].replace(/,/g,"");codTouched=true}
   draw();
 };
 $("print").onclick=()=>{draw();window.print()};
