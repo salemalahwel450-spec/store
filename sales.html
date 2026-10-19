@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سجل المبيعات</title>
+<style>
+:root{--ink:#241c15;--muted:#7a6c5d;--line:#eadfce;--gold:#b8892f;--green:#1fa855;--red:#c0392b}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Tahoma,"Noto Naskh Arabic",Arial,sans-serif;background:#faf6f0;color:var(--ink);padding:14px}
+.wrap{max-width:640px;margin:auto}
+h1{font-size:21px;margin:4px 0 14px}
+h2{font-size:17px;margin:0 0 10px}
+.box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 8px;text-align:center}
+.card .t{font-size:13px;color:var(--muted)}
+.card .v{font-size:19px;font-weight:800;margin:4px 0;color:var(--gold)}
+.card .s{font-size:12px;color:var(--muted);line-height:1.6}
+label{display:block;margin:10px 0 4px;font-size:14px;color:var(--muted)}
+input,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit;background:#fff}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{border:0;border-radius:12px;padding:13px;font-size:16px;font-family:inherit;cursor:pointer;width:100%;margin-top:10px}
+.fill{background:var(--gold);color:#fff}
+.save{background:var(--green);color:#fff;font-size:17px}
+.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.hint{font-size:13px;color:var(--muted);line-height:1.7;margin:6px 0 0}
+.row{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+.row:last-child{border-bottom:0}
+.row .l{flex:1;line-height:1.6}
+.row .l small{color:var(--muted);display:block}
+.row .r{text-align:left;white-space:nowrap}
+.row b{color:var(--gold)}
+.del{background:none;border:0;color:var(--red);font-size:13px;width:auto;margin:2px 0 0;padding:2px 0;cursor:pointer}
+.empty{text-align:center;color:var(--muted);padding:18px 0}
+.bar{display:flex;gap:8px}
+.bar button{margin-top:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>سجل المبيعات</h1>
+
+  <div class="cards">
+    <div class="card"><div class="t">اليوم</div><div class="v" id="d_total">0</div><div class="s" id="d_sub"></div></div>
+    <div class="card"><div class="t">هذا الأسبوع</div><div class="v" id="w_total">0</div><div class="s" id="w_sub"></div></div>
+    <div class="card"><div class="t">هذا الشهر</div><div class="v" id="m_total">0</div><div class="s" id="m_sub"></div></div>
+  </div>
+
+  <div class="box">
+    <h2>تسجيل بيعة جديدة</h2>
+    <label>الصق رسالة الطلب (اختياري)</label>
+    <textarea id="paste" rows="4" placeholder="الصق رسالة واتساب لتُملأ البيانات"></textarea>
+    <button class="fill" id="auto">تعبئة تلقائية</button>
+
+    <label>التاريخ</label><input id="f_date" type="date">
+    <label>اسم الزبون</label><input id="f_name">
+    <label>المدينة</label><input id="f_city">
+    <label>العطور</label><textarea id="f_items" rows="2"></textarea>
+    <div class="two">
+      <div><label>المبلغ المستلم (د.ل)</label><input id="f_amount" inputmode="decimal" placeholder="مثال: 665"></div>
+      <div><label>تكلفتك (اختياري)</label><input id="f_cost" inputmode="decimal" placeholder="سعر شرائك + التوصيل"></div>
+    </div>
+    <button class="save" id="save">حفظ البيعة</button>
+    <p class="hint">سجّل البيعة بعد تسليم الطلب واستلام المبلغ فقط. ولو ملأت خانة التكلفة فسيحسب لك الربح.</p>
+  </div>
+
+  <div class="box">
+    <h2>آخر المبيعات</h2>
+    <div id="list"></div>
+  </div>
+
+  <div class="box">
+    <h2>حفظ نسخة احتياطية</h2>
+    <div class="bar">
+      <button class="ghost" id="csv">تنزيل Excel (CSV)</button>
+      <button class="ghost" id="copy">نسخ الملخص</button>
+    </div>
+    <p class="hint">البيانات محفوظة في متصفح هاتفك فقط. إن مسحت بيانات المتصفح أو غيّرت الهاتف تضيع، فحمّل نسخة CSV بين وقت وآخر. وافتح هذه الصفحة دائماً من نفس الرابط ونفس المتصفح.</p>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const KEY="perfume_sales_v1";
+let sales=[];
+try{sales=JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){sales=[]}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(sales))}catch(e){alert("تعذّر الحفظ في هذا المتصفح")}}
+
+const pad=n=>String(n).padStart(2,"0");
+const ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const parse=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
+const num=v=>{const n=parseFloat(String(v).replace(/[^\d.]/g,""));return isNaN(n)?0:n};
+const fmt=n=>(Math.round(n*100)/100).toLocaleString("en-US");
+
+$("f_date").value=ymd(new Date());
+
+function weekStart(d){ // الأسبوع يبدأ السبت
+  const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  const back=(x.getDay()+1)%7; // Sat=0
+  x.setDate(x.getDate()-back);return x;
+}
+function sum(list){
+  const total=list.reduce((a,s)=>a+s.amount,0);
+  const withCost=list.filter(s=>s.cost>0);
+  const profit=withCost.reduce((a,s)=>a+(s.amount-s.cost),0);
+  return {n:list.length,total,profit,hasProfit:withCost.length>0};
+}
+function card(prefix,list){
+  const r=sum(list);
+  $(prefix+"_total").textContent=fmt(r.total);
+  $(prefix+"_sub").innerHTML=r.n+" طلب"+(r.hasProfit?"<br>ربح "+fmt(r.profit):"");
+}
+function render(){
+  const now=new Date(),today=ymd(now),ws=ymd(weekStart(now)),ms=now.getFullYear()+"-"+pad(now.getMonth()+1);
+  card("d",sales.filter(s=>s.date===today));
+  card("w",sales.filter(s=>s.date>=ws&&s.date<=today));
+  card("m",sales.filter(s=>s.date.startsWith(ms)));
+  const sorted=[...sales].sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id).slice(0,30);
+  $("list").innerHTML=sorted.length?sorted.map(s=>`
+    <div class="row"><div class="l"><b>${esc(s.name)||"بدون اسم"}</b> ${s.city?"• "+esc(s.city):""}
+      <small>${esc(s.items).replace(/\n/g,"<br>")}</small>
+      <small>${s.date}</small>
+      <button class="del" data-id="${s.id}">حذف</button></div>
+      <div class="r"><b>${fmt(s.amount)} د.ل</b></div></div>`).join(""):'<div class="empty">لا توجد مبيعات بعد</div>';
+}
+function esc(t){return String(t||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+$("list").onclick=e=>{const id=e.target.dataset.id;if(!id)return;
+  if(confirm("حذف هذه البيعة؟")){sales=sales.filter(s=>String(s.id)!==id);persist();render()}};
+
+function grab(txt,key){const m=txt.match(new RegExp("^\\s*"+key+"\\s*[:：]\\s*(.+)$","m"));return m?m[1].trim():""}
+$("auto").onclick=()=>{
+  const t=$("paste").value;
+  $("f_name").value=grab(t,"الاسم");
+  $("f_city").value=grab(t,"المدينة");
+  $("f_items").value=t.split("\n").filter(l=>l.trim().startsWith("•")).map(l=>l.trim()).join("\n");
+  const tot=t.match(/الإجمالي\s*[:：]\s*([\d.,]+)/)||t.match(/مجموع العطور\s*[:：]\s*([\d.,]+)/);
+  if(tot)$("f_amount").value=tot[1].replace(/,/g,"");
+};
+
+$("save").onclick=()=>{
+  const amount=num($("f_amount").value);
+  if(!amount){alert("اكتب المبلغ المستلم");return}
+  if(!$("f_date").value){alert("اختر التاريخ");return}
+  sales.push({id:Date.now(),date:$("f_date").value,name:$("f_name").value.trim(),city:$("f_city").value.trim(),
+    items:$("f_items").value.trim(),amount,cost:num($("f_cost").value)});
+  persist();
+  ["paste","f_name","f_city","f_items","f_amount","f_cost"].forEach(i=>$(i).value="");
+  $("f_date").value=ymd(new Date());
+  render();window.scrollTo({top:0,behavior:"smooth"});
+};
+
+$("csv").onclick=()=>{
+  if(!sales.length){alert("لا توجد مبيعات");return}
+  const q=v=>'"'+String(v).replace(/"/g,'""').replace(/\n/g," | ")+'"';
+  const rows=[["التاريخ","الزبون","المدينة","العطور","المبلغ","التكلفة","الربح"]].concat(
+    [...sales].sort((a,b)=>a.date.localeCompare(b.date)).map(s=>[s.date,s.name,s.city,s.items,s.amount,s.cost||"",s.cost?s.amount-s.cost:""]));
+  const blob=new Blob(["﻿"+rows.map(r=>r.map(q).join(",")).join("\n")],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sales-"+ymd(new Date())+".csv";
+  document.body.appendChild(a);a.click();a.remove();
+};
+$("copy").onclick=async()=>{
+  const now=new Date(),today=ymd(now),ws=ymd(weekStart(now)),ms=now.getFullYear()+"-"+pad(now.getMonth()+1);
+  const L=(n,l)=>{const r=sum(l);return n+": "+r.n+" طلب = "+fmt(r.total)+" د.ل"+(r.hasProfit?" (ربح "+fmt(r.profit)+")":"")};
+  const t=[L("اليوم",sales.filter(s=>s.date===today)),L("الأسبوع",sales.filter(s=>s.date>=ws&&s.date<=today)),L("الشهر",sales.filter(s=>s.date.startsWith(ms)))].join("\n");
+  try{await navigator.clipboard.writeText(t);alert("تم النسخ")}catch(e){alert(t)}
+};
+render();
+</script>
+</body>
+</html>
